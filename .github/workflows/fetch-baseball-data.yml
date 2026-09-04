@@ -2,7 +2,10 @@ name: Fetch and Update Baseball Data
 
 on:
   schedule:
+    # Run daily at midnight UTC
     - cron: '0 0 * * *'
+
+  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
@@ -10,28 +13,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Verify workflow
+      # 3. Verify Python
+      - name: Verify Python
         run: |
-          echo "=== Python ==="
+          echo "Running baseball data workflow"
           python --version
+          python -c "import urllib.request; print('urllib is working')"
 
-          echo "=== Workflow files ==="
-          find .github/workflows -type f -maxdepth 1 -print
-
-          echo "=== Search for requests ==="
-          grep -Rni "import requests\|requests.get\|pip install requests" .github/workflows || true
-
-          echo "=== Search entire repository ==="
-          grep -Rni "import requests" . --exclude-dir=.git || true
-
+      # 4. Fetch baseball data
       - name: Fetch baseball data
         run: |
           python -c "
@@ -41,20 +40,37 @@ jobs:
 
           url = 'https://api.sampleapis.com/baseball/hitsSingleSeason'
 
+          print('Fetching baseball data...')
+          print('URL:', url)
+
           with urllib.request.urlopen(url, timeout=30) as response:
               data = json.loads(response.read().decode('utf-8'))
 
+          print('Data successfully downloaded')
+
+          # Create data directory
           os.makedirs('data', exist_ok=True)
 
+          # Output file
           filename = 'data/baseball-hits.json'
 
-          with open(filename, 'w') as f:
-              json.dump(data, f, indent=2)
+          # Save JSON
+          with open(filename, 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
 
           print(f'Data fetched and saved to {filename}')
           print(f'Total records: {len(data)}')
           "
 
+      # 5. Check generated file
+      - name: Check generated data
+        run: |
+          echo "Checking generated file..."
+          ls -lh data/
+          echo "First 20 lines:"
+          head -20 data/baseball-hits.json
+
+      # 6. Commit and push changes
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
