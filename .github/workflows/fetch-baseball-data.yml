@@ -1,17 +1,17 @@
 name: Fetch and Update Baseball Data
-
 on:
   schedule:
     # Run daily at midnight UTC
     - cron: '0 0 * * *'
-
   # Allow manual trigger
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   fetch-and-update:
     runs-on: ubuntu-latest
-
     steps:
       # 1. Checkout repository
       - name: Checkout repository
@@ -35,16 +35,29 @@ jobs:
         run: |
           python -c "
           import urllib.request
+          import urllib.error
           import json
           import os
+          import sys
 
           url = 'https://api.sampleapis.com/baseball/hitsSingleSeason'
-
           print('Fetching baseball data...')
           print('URL:', url)
 
-          with urllib.request.urlopen(url, timeout=30) as response:
-              data = json.loads(response.read().decode('utf-8'))
+          try:
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  raw = response.read().decode('utf-8')
+                  data = json.loads(raw)
+          except urllib.error.URLError as e:
+              print(f'ERROR: Failed to fetch data: {e}')
+              sys.exit(1)
+          except json.JSONDecodeError as e:
+              print(f'ERROR: Failed to parse JSON response: {e}')
+              sys.exit(1)
+
+          if not isinstance(data, list):
+              print(f'ERROR: Expected a list, got {type(data).__name__}. Response: {str(data)[:200]}')
+              sys.exit(1)
 
           print('Data successfully downloaded')
 
@@ -75,12 +88,11 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-
           git add data/baseball-hits.json
-
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
             git commit -m "Update baseball hits data"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
             git push
           fi
