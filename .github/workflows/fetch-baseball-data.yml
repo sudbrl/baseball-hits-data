@@ -1,0 +1,61 @@
+name: Fetch and Update Baseball Data
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  fetch-and-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Fetch baseball data
+        run: |
+          python -c "
+          import requests
+          import json
+          from datetime import datetime
+          
+          # Fetch data from API
+          response = requests.get('https://api.sampleapis.com/baseball/hitsSingleSeason')
+          response.raise_for_status()
+          
+          data = response.json()
+          
+          # Create directory if it doesn't exist
+          import os
+          os.makedirs('data', exist_ok=True)
+          
+          # Save data with timestamp
+          filename = 'data/baseball-hits.json'
+          with open(filename, 'w') as f:
+              json.dump(data, f, indent=2)
+          
+          print(f'Data fetched and saved to {filename}')
+          print(f'Total records: {len(data)}')
+          "
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/baseball-hits.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update baseball hits data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            git push
+          fi
